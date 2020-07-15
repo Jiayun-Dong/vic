@@ -97,7 +97,16 @@ y = df$Recidivate.Within.Two.Years
 y[y==0] = -1
 
 # variables of interest
-vlist = c("age", "race", "prior", "gender")
+# vlist = c("age", "race", "prior", "gender")
+vlist = c("age", "race", "prior", "gender", "juvenilecrime", "currentcharge")
+
+# training/texting split
+set.seed(2020)
+train_id = sample(1:nrow(X), nrow(X) * 0.7)
+X = X[train_id,]
+y = y[train_id]
+X_test = X[-train_id,]
+y_test = y[-train_id]
 
 # parameter
 epsilon = 0.05
@@ -115,11 +124,16 @@ epsScale = 1.5 # over-sample a bit
   summary(model)
   beta = model$coefficients
   se = summary(model)$coefficients[, 2]
-  # prediction error
-  yhat = rep(-1, nrow(df))
-  yhat[beta[1] + X %*% beta[-1] > 0] = 1
-  prederror = sum(y != yhat)
-  prederror/nrow(X)
+  # model evaluation
+    # training
+    y_hat = if_else(X %*% beta[-1] + beta[1] > 0, 1, -1)
+    sum(y == y_hat)/length(y)
+    # testing
+    y_hat = if_else(X_test %*% beta[-1] + beta[1] > 0, 1, -1)
+    sum(y_hat == y_test)/length(y_test)
+  # model reliance for a single model - the center of the rashomon set
+  mr = modelreliance.full(vlist, beta, X, y)
+  
   # total loss
   loss0 = totalloss(beta, X, y)
   bound = loss0*(1+epsilon)
@@ -135,10 +149,6 @@ epsScale = 1.5 # over-sample a bit
     myLoss[i] = totalloss(points[i,],X, y)
   }
   points = points[myLoss < bound, ]
-  
-  # tuning the parameters here
-  # choose epsScale = 1.5
-  # NUM_PCA = 5
   
   source("ellipsoid.R")
 
@@ -158,21 +168,19 @@ epsScale = 1.5 # over-sample a bit
     points = points[myLoss < bound, ]
   }
   
-  
   rashomon = as.data.frame(points)
+  rash_loss = myLoss[myLoss < bound]
+  # hist(rash_loss)
   
-  # visualize rashomon set
-  colnames(rashomon) = c("int", "v1", "v2", "v3")
-  rashomonplot <- plot_ly(rashomon[,2:4], x = ~v1, y = ~v2, z = ~v3,
-                          marker = list(size = 2)) %>%
-    layout(title = "Rashomon Set",
-           scene = list(xaxis = list(title = colnames(X)[1]),
-                        yaxis = list(title = colnames(X)[2]),
-                        zaxis = list(title = colnames(X)[3])))
-  rashomonplot
-  
-  # model reliance for a single model - the center of the rashomon set
-  mr = modelreliance.full(vlist, beta, X, y)
+  # # visualize rashomon set
+  # colnames(rashomon) = c("int", "v1", "v2", "v3")
+  # rashomonplot <- plot_ly(rashomon[,2:4], x = ~v1, y = ~v2, z = ~v3,
+  #                         marker = list(size = 2)) %>%
+  #   layout(title = "Rashomon Set",
+  #          scene = list(xaxis = list(title = colnames(X)[1]),
+  #                       yaxis = list(title = colnames(X)[2]),
+  #                       zaxis = list(title = colnames(X)[3])))
+  # rashomonplot
   
   # model class reliance for all models in the rashomon set
   mcr = matrix(0, nrow = nrow(rashomon), ncol = length(vlist))
@@ -180,16 +188,19 @@ epsScale = 1.5 # over-sample a bit
     mcr[i, ] = modelreliance.full(vlist, as.double(rashomon[i, ]), X, y)
   }
   mcr = data.frame(mcr)
+  mcr_full = mcr
+  mcr = mcr[,1:4]
   colnames(mcr) = c("v1", "v2", "v3", "v4")
   
-  # visualize VID
-  VIC <- plot_ly(mcr, x = ~v1, y = ~v2, z = ~v3,
-                 marker = list(size = 2)) %>%
-    layout(title = "Variable Importance Cloud",
-           scene = list(xaxis = list(title = colnames(X)[1]),
-                        yaxis = list(title = colnames(X)[2]),
-                        zaxis = list(title = colnames(X)[3])))
-  VIC
+  # # visualize VID
+  # VIC <- plot_ly(mcr, x = ~v1, y = ~v2, z = ~v3,
+  #                marker = list(size = 2)) %>%
+  #   layout(title = "Variable Importance Cloud",
+  #          scene = list(xaxis = list(title = colnames(X)[1]),
+  #                       yaxis = list(title = colnames(X)[2]),
+  #                       zaxis = list(title = colnames(X)[3])))
+  # VIC
+  
   
   # plot VID
     par(mfrow=c(4,4))
@@ -225,4 +236,63 @@ epsScale = 1.5 # over-sample a bit
          cex.lab=1.25, cex.axis=1.25, cex.main=1.5, cex.sub=1)
     plot(0,type='n',axes=FALSE,ann=FALSE)
     
+    
+    # least reliance models / corner models
+    
+      # least reliance on age
+        mcr_full[which(mcr$v1 == min(mcr$v1)),]  # mr vector
+        beta = rashomon[which(mcr$v1 == min(mcr$v1)),] # coefficients
+        beta = as.matrix(beta)
+        beta
+        # training
+        y_hat = if_else(X %*% beta[-1] + beta[1] > 0, 1, -1)
+        sum(y == y_hat)/length(y)
+        # testing
+        y_hat = if_else(X_test %*% beta[-1] + beta[1] > 0, 1, -1)
+        sum(y_hat == y_test)/length(y_test)
+        
+      # least reliance on race
+        mcr_full[which(mcr$v2 == min(mcr$v2)),]  # mr vector
+        beta = rashomon[which(mcr$v2 == min(mcr$v2)),] # coefficients
+        beta = as.matrix(beta)
+        beta
+        # training
+        y_hat = if_else(X %*% beta[-1] + beta[1] > 0, 1, -1)
+        sum(y == y_hat)/length(y)
+        # testing
+        y_hat = if_else(X_test %*% beta[-1] + beta[1] > 0, 1, -1)
+        sum(y_hat == y_test)/length(y_test)
+        
+      # least reliance on prior
+        mcr_full[which(mcr$v3 == min(mcr$v3)),]  # mr vector
+        beta = rashomon[which(mcr$v3 == min(mcr$v3)),] # coefficients
+        beta = as.matrix(beta)
+        beta
+        # training
+        y_hat = if_else(X %*% beta[-1] + beta[1] > 0, 1, -1)
+        sum(y == y_hat)/length(y)
+        # testing
+        y_hat = if_else(X_test %*% beta[-1] + beta[1] > 0, 1, -1)
+        sum(y_hat == y_test)/length(y_test)
+        
+      # least reliance on gender
+        mcr_full[which(mcr$v4 == min(mcr$v4)),]  # mr vector
+        beta = rashomon[which(mcr$v4 == min(mcr$v4)),] # coefficients
+        beta = as.matrix(beta)
+        beta
+        # training
+        y_hat = if_else(X %*% beta[-1] + beta[1] > 0, 1, -1)
+        sum(y == y_hat)/length(y)
+        # testing
+        y_hat = if_else(X_test %*% beta[-1] + beta[1] > 0, 1, -1)
+        sum(y_hat == y_test)/length(y_test)
+
+    # information compensation
+    cor(mcr_full)
+    
+    # average mr
+    apply(mcr_full, 2, mean)
+    apply(mcr_full, 2, max)
+    apply(mcr_full, 2, min)
+    apply(mcr_full, 2, max) - apply(mcr_full, 2, min)
     

@@ -1,11 +1,11 @@
 
-# library(dplyr)
-# library(plyr)
+library(dplyr)
 library(plotly)
-# library(tictoc)
-
+library(tidyverse)  # data manipulation
+library(cluster)    # clustering algorithms
+library(factoextra) # clustering visualization
+library(dendextend) # for comparing two dendrograms
 library(glmnet)
-library(tsne)
 
 setwd("/Users/jiayun/Documents/coding/vgg")
 
@@ -135,83 +135,69 @@ for(i in 1:nrow(rashomon)){
 }
 mcr = data.frame(mcr)
 
-# find the most important 4 variables to visualize
+
+# characteristics of the rachomon set (from the mcr perspective)
+cor(mcr)
+
+apply(mcr, 2, max)
+order(apply(mcr, 2, max), decreasing = TRUE)
+
+apply(mcr, 2, min)
+order(apply(mcr, 2, min), decreasing = TRUE)
+
+apply(mcr, 2, mean)
 myOrder = order(apply(mcr, 2, mean), decreasing = TRUE)
-mcr_small = mcr[,myOrder[1:4]]
-vlist = id[myOrder[1:4]]
-
-# # define a set of features THAT WE CAN VISUALIZE!
-# feasible_set = c(60, 13, 37, 14)
-# mcr_small = mcr[,feasible_set]
-# vlist = id[feasible_set]
-vname = NULL
-for(i in 1:length(vlist)){
-  vname = c(vname, sprintf("feature_%i", vlist[i]))
-}
-
-# vid
-m = max(mcr_small) * 1.02
-plot_vid = function(mcr_small, vname, m){
-  par(mfrow=c(4,4))
-  plot(0,type='n',axes=FALSE,ann=FALSE)
-  plot(mcr_small[,2], mcr_small[,1], xlab = vname[2], ylab = vname[1], pch = ".", xlim = c(1,m), ylim = c(1,m))
-  plot(mcr_small[,3], mcr_small[,1], xlab = vname[3], ylab = vname[1], pch = ".", xlim = c(1,m), ylim = c(1,m))
-  plot(mcr_small[,4], mcr_small[,1], xlab = vname[4], ylab = vname[1], pch = ".", xlim = c(1,m), ylim = c(1,m))
-  
-  plot(mcr_small[,1], mcr_small[,2], xlab = vname[1], ylab = vname[2], pch = ".", xlim = c(1,m), ylim = c(1,m))
-  plot(0,type='n',axes=FALSE,ann=FALSE)
-  plot(mcr_small[,3], mcr_small[,2], xlab = vname[3], ylab = vname[2], pch = ".", xlim = c(1,m), ylim = c(1,m))
-  plot(mcr_small[,4], mcr_small[,2], xlab = vname[4], ylab = vname[2], pch = ".", xlim = c(1,m), ylim = c(1,m))
-  
-  plot(mcr_small[,1], mcr_small[,3], xlab = vname[1], ylab = vname[3], pch = ".", xlim = c(1,m), ylim = c(1,m))
-  plot(mcr_small[,2], mcr_small[,3], xlab = vname[2], ylab = vname[3], pch = ".", xlim = c(1,m), ylim = c(1,m))
-  plot(0,type='n',axes=FALSE,ann=FALSE)
-  plot(mcr_small[,4], mcr_small[,3], xlab = vname[4], ylab = vname[3], pch = ".", xlim = c(1,m), ylim = c(1,m))
-  
-  plot(mcr_small[,1], mcr_small[,4], xlab = vname[1], ylab = vname[4], pch = ".", xlim = c(1,m), ylim = c(1,m))
-  plot(mcr_small[,2], mcr_small[,4], xlab = vname[2], ylab = vname[4], pch = ".", xlim = c(1,m), ylim = c(1,m))
-  plot(mcr_small[,3], mcr_small[,4], xlab = vname[3], ylab = vname[4], pch = ".", xlim = c(1,m), ylim = c(1,m))
-  plot(0,type='n',axes=FALSE,ann=FALSE)
-}
-plot_vid(mcr_small, vname, m)
-
-
-# dim reduction
-index = 1:nrow(rashomon)
-
-set.seed(2018)
-start_time = Sys.time()
-tsne_result = tsne(mcr_small, k = 2, max_iter = 1000)
-end_time = Sys.time()
-message("time difference: ", end_time - start_time)
-
-tsne_df = data.frame(tsne_result, index)
-filter = sample(1:length(index), min(length(index), 500), replace = FALSE, prob = NULL)
-# viz <- plot_ly(tsne_df[filter, ], x = ~X1, y = ~X2, type = 'scatter', mode = 'markers', text = ~as.character(index))%>%
-#   add_text(textposition = "top right")
-viz <- plot_ly(tsne_df[filter, ], x = ~X1, y = ~X2, type = 'scatter', mode = 'markers', text = ~as.character(index))
-viz
 
 
 # clustering
-library(tidyverse)  # data manipulation
-library(cluster)    # clustering algorithms
-library(factoextra) # clustering visualization
-library(dendextend) # for comparing two dendrograms
 
-df = data.frame(tsne_result)
-df = scale(df)
+k2 = kmeans(mcr, centers = 4, nstart = 25)
+sub_grp = k2$cluster
 
-d <- dist(df, method = "euclidean")
-hc1 <- hclust(d, method = "complete" )
-# plot(hc1, cex = 0.6, hang = -1)
-# rect.hclust(hc1, k = 4, border = 2:5)
-sub_grp <- cutree(hc1, k = 4)
-fviz_cluster(list(data = df, cluster = sub_grp))
+  # clustering results
+  cat = sub_grp 
+  sum(cat==1)
+  sum(cat==2)
+  sum(cat==3)
+  sum(cat==4)
 
-cat = sub_grp
+  # find centers
+  red_center = order(rowSums(sweep(mcr, 2, k2$centers[1,])^2), decreasing = FALSE)[1]
+  green_center = order(rowSums(sweep(mcr, 2, k2$centers[2,])^2), decreasing = FALSE)[1]
+  blue_center = order(rowSums(sweep(mcr, 2, k2$centers[3,])^2), decreasing = FALSE)[1]
+  purple_center = order(rowSums(sweep(mcr, 2, k2$centers[4,])^2), decreasing = FALSE)[1]
+  model_id = c(red_center, green_center, blue_center, purple_center)
 
+
+  # most important variable to a cluster
+  mcr_red = apply(mcr[cat == 1,], 2, mean)
+  mcr_green = apply(mcr[cat == 2,], 2, mean)
+  mcr_blue = apply(mcr[cat == 3,], 2, mean)
+  mcr_purple = apply(mcr[cat == 4,], 2, mean)
+  mcr_avg = apply(mcr, 2, mean)
+  
+  red = order(mcr_red - mcr_avg, decreasing = TRUE)
+  (mcr_red - mcr_avg)[red]
+  green = order(mcr_green - mcr_avg, decreasing = TRUE)
+  (mcr_green - mcr_avg)[green]
+  blue = order(mcr_blue - mcr_avg, decreasing = TRUE)
+  (mcr_blue - mcr_avg)[blue]
+  purple = order(mcr_purple - mcr_avg, decreasing = TRUE)
+  (mcr_purple - mcr_avg)[purple]
+
+  vlist = c(red[1], green[1], blue[1], purple[1])
+  mcr_small = mcr[,vlist]
+  vlist = id[vlist]
+
+  vname = NULL
+  for(i in 1:length(vlist)){
+    vname = c(vname, sprintf("feature_%i", vlist[i]))
+  }
+
+
+# VID
 color = c("brown2", "chartreuse3", "aquamarine2", "darkorchid1")
+m = max(mcr_small) * 1.02
 plot_by_cat = function(x, y , name1, name2, m, cat){
   index = 1:length(x)
   i = 1
@@ -244,8 +230,7 @@ plot_by_cat(mcr_small[,3], mcr_small[,4], vname[3], vname[4], m, cat)
 plot(0,type='n',axes=FALSE,ann=FALSE)
 
 # visualization models
-model_id = c(36, 285, 50, 9)
-# model_id = c(91, 34, 114, 58)
+# model_id = c(36, 285, 50, 9)
 model_coefficients = rashomon[model_id,]
 filter_id = id
 write.csv(model_coefficients, "model.csv")
